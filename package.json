@@ -1,0 +1,12 @@
+{
+  "name": "toptop-card",
+  "version": "1.0.0",
+  "description": "Next-gen animated tile card for Home Assistant with popups, graphs and visual editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs && node --check dist/toptop-card.js"
+  },
+  "license": "MIT"
+}

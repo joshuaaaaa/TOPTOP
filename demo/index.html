@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TopTop Card – demo</title>
+<style>
+  :root {
+    --primary-color: #03a9f4; --accent-color: #ff9800; --primary-text-color: #1c1c1e; --secondary-text-color: #6e6e73;
+    --card-background-color: #ffffff; --ha-card-background: #ffffff; --primary-background-color: #eef1f6;
+    --disabled-text-color: #9e9e9e; --error-color: #db4437; --ha-card-border-radius: 18px;
+    --ha-card-box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  }
+  :root.dark {
+    --primary-text-color: #f2f2f7; --secondary-text-color: #9a9aa3; --card-background-color: #1c1c22;
+    --ha-card-background: #1c1c22; --primary-background-color: #101014; --ha-card-box-shadow: none;
+  }
+  html, body { margin: 0; background: var(--primary-background-color); color: var(--primary-text-color); font-family: Roboto, system-ui, -apple-system, sans-serif; }
+  body.wall { background: radial-gradient(60% 60% at 15% 10%, #7c4dff55, transparent), radial-gradient(50% 50% at 90% 30%, #00bcd455, transparent), radial-gradient(60% 60% at 50% 100%, #ff408155, transparent), var(--primary-background-color); background-attachment: fixed; }
+  header { padding: 28px 20px 8px; max-width: 1280px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  header h1 { margin: 0; font-size: 28px; background: linear-gradient(90deg, #7c4dff, #00bcd4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header .sp { flex: 1; }
+  header button { border: none; padding: 9px 14px; border-radius: 12px; background: var(--card-background-color); color: var(--primary-text-color); font-weight: 600; cursor: pointer; box-shadow: var(--ha-card-box-shadow); }
+  main { max-width: 1280px; margin: 0 auto; padding: 0 20px 60px; }
+  h2 { font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--secondary-text-color); margin: 30px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .grid.sq { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .neonbg { background: #05060a; padding: 14px; border-radius: 22px; }
+  #log { position: fixed; bottom: 12px; left: 12px; font-size: 12px; background: rgba(0,0,0,.75); color: #fff; padding: 6px 10px; border-radius: 8px; opacity: 0; transition: opacity .3s; z-index: 9999; }
+</style>
+</head>
+<body class="wall">
+<header>
+  <h1>TopTop Card</h1><span style="opacity:.6">živé demo s mock Home Assistantem</span>
+  <div class="sp"></div>
+  <button id="theme">🌓 Tmavý / světlý</button>
+  <button id="wall">🖼️ Tapeta</button>
+</header>
+<main id="main"></main>
+<div id="log"></div>
+
+<script src="mdi-subset.js"></script>
+<script>
+/* ---------- minimal HA element shims ---------- */
+customElements.define("ha-card", class extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" }).innerHTML = `<style>:host{display:block;background:var(--ha-card-background,#fff);border-radius:var(--ha-card-border-radius,12px);box-shadow:var(--ha-card-box-shadow,none);border:1px solid var(--ha-card-border-color,rgba(0,0,0,.06));color:var(--primary-text-color)}</style><slot></slot>`;
+  }
+});
+const svgFor = (name) => {
+  const p = (window.MDI || {})[String(name || "").replace("mdi:", "")];
+  return `<svg viewBox="0 0 24 24" style="width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);display:block;fill:currentColor"><path d="${p || "M12 2A10 10 0 1 0 22 12 10 10 0 0 0 12 2Z"}"/></svg>`;
+};
+customElements.define("ha-icon", class extends HTMLElement {
+  static get observedAttributes() { return ["icon"]; }
+  constructor() { super(); this.attachShadow({ mode: "open" }); }
+  attributeChangedCallback() { this.shadowRoot.innerHTML = `<style>:host{display:flex}</style>` + svgFor(this.getAttribute("icon")); }
+  connectedCallback() { this.attributeChangedCallback(); }
+});
+const DOMAIN_ICON = { light: "lightbulb", fan: "fan", climate: "thermostat", sensor: "thermometer", cover: "window-shutter", media_player: "speaker", lock: "lock", binary_sensor: "motion-sensor", alarm_control_panel: "shield-home", vacuum: "robot-vacuum", timer: "timer-outline", switch: "power-socket-eu", person: "account", input_select: "format-list-bulleted", update: "package-up", scene: "palette", weather: "weather-partly-cloudy" };
+customElements.define("ha-state-icon", class extends HTMLElement {
+  constructor() { super(); this.attachShadow({ mode: "open" }); }
+  set stateObj(so) { this._so = so; this._r(); } set icon(i) { this._i = i; this._r(); } set hass(h) {}
+  _r() {
+    const so = this._so; let i = this._i || (so && so.attributes.icon);
+    if (!i && so) {
+      const d = so.entity_id.split(".")[0];
+      if (d === "lock") i = so.state === "locked" ? "mdi:lock" : "mdi:lock-open-variant";
+      else if (d === "cover") i = so.state === "closed" ? "mdi:window-shutter" : "mdi:window-shutter-open";
+      else if (d === "light") i = so.state === "on" ? "mdi:lightbulb-on" : "mdi:lightbulb-outline";
+      else if (d === "binary_sensor") i = { motion: so.state === "on" ? "mdi:motion-sensor" : "mdi:motion-sensor-off", window: so.state === "on" ? "mdi:window-open-variant" : "mdi:window-closed-variant", smoke: "mdi:smoke-detector" }[so.attributes.device_class] || "mdi:checkbox-blank-circle-outline";
+      else if (d === "sensor") i = { temperature: "mdi:thermometer", humidity: "mdi:water-percent", battery: "mdi:battery-20", power: "mdi:flash", carbon_dioxide: "mdi:molecule-co2" }[so.attributes.device_class] || "mdi:eye";
+      else i = "mdi:" + (DOMAIN_ICON[d] || "bookmark");
+    }
+    this.shadowRoot.innerHTML = `<style>:host{display:flex}</style>` + svgFor(i);
+  }
+});
+
+</script>
+<script src="../dist/toptop-card.js"></script>
+<script>
+/* ---------- mock hass ---------- */
+const now = Date.now();
+const iso = (minAgo) => new Date(now - minAgo * 60e3).toISOString();
+const st = (entity_id, state, attributes = {}, ago = 7) => ({ entity_id, state, attributes, last_changed: iso(ago), last_updated: iso(ago) });
+const states = {};
+[
+  st("light.obyvak", "on", { friendly_name: "Obývák", brightness: 178, rgb_color: [255, 147, 41], color_temp_kelvin: 2700, min_color_temp_kelvin: 2200, max_color_temp_kelvin: 6500, supported_color_modes: ["color_temp", "hs"], effect_list: ["Duha", "Svíčka", "Party", "Západ slunce"], effect: "Svíčka" }, 12),
+  st("light.kuchyn", "off", { friendly_name: "Kuchyň", supported_color_modes: ["brightness"] }, 64),
+  st("light.led_pasek", "on", { friendly_name: "LED pásek", brightness: 230, rgb_color: [124, 77, 255], supported_color_modes: ["hs"] }, 3),
+  st("fan.ventilator", "on", { friendly_name: "Ventilátor", percentage: 66, percentage_step: 33.33, oscillating: true, direction: "forward", preset_modes: ["auto", "spánek", "turbo"], preset_mode: "auto" }, 22),
+  st("climate.obyvak", "heat", { friendly_name: "Termostat", hvac_action: "heating", temperature: 22.5, current_temperature: 21.3, min_temp: 7, max_temp: 30, target_temp_step: 0.5, hvac_modes: ["off", "heat", "cool", "auto"], preset_modes: ["comfort", "eco", "away"], preset_mode: "comfort", fan_modes: ["auto", "low", "high"], fan_mode: "auto" }, 40),
+  st("sensor.teplota", "23.4", { friendly_name: "Teplota venku", unit_of_measurement: "°C", device_class: "temperature", state_class: "measurement" }, 2),
+  st("sensor.vlhkost", "48", { friendly_name: "Vlhkost", unit_of_measurement: "%", device_class: "humidity", state_class: "measurement" }, 4),
+  st("sensor.baterie", "18", { friendly_name: "Baterie senzoru", unit_of_measurement: "%", device_class: "battery", state_class: "measurement" }, 90),
+  st("sensor.spotreba", "1250", { friendly_name: "Spotřeba domu", unit_of_measurement: "W", device_class: "power", state_class: "measurement" }, 1),
+  st("sensor.co2", "1050", { friendly_name: "CO₂ ložnice", unit_of_measurement: "ppm", device_class: "carbon_dioxide", state_class: "measurement" }, 5),
+  st("sensor.voda", "72", { friendly_name: "Nádrž na vodu", unit_of_measurement: "%", state_class: "measurement", icon: "mdi:water" }, 30),
+  st("cover.zaluzie", "open", { friendly_name: "Žaluzie", current_position: 60, current_tilt_position: 40 }, 120),
+  st("media_player.obyvak", "playing", { friendly_name: "Sonos", media_title: "Midnight City", media_artist: "M83", media_album_name: "Hurry Up, We're Dreaming", volume_level: 0.35, source_list: ["Spotify", "TV", "Rádio"], source: "Spotify" }, 9),
+  st("lock.dvere", "locked", { friendly_name: "Vchodové dveře", supported_features: 1 }, 300),
+  st("binary_sensor.pohyb", "on", { friendly_name: "Pohyb chodba", device_class: "motion" }, 1),
+  st("binary_sensor.okno", "on", { friendly_name: "Okno ložnice", device_class: "window" }, 15),
+  st("binary_sensor.kour", "on", { friendly_name: "Detektor kouře", device_class: "smoke" }, 1),
+  st("alarm_control_panel.dum", "armed_away", { friendly_name: "Alarm", code_format: "number", supported_features: 39 }, 200),
+  st("vacuum.robot", "cleaning", { friendly_name: "Robot vysavač", fan_speed_list: ["tichý", "standard", "max"], fan_speed: "standard", battery_level: 64 }, 18),
+  st("timer.pracka", "active", { friendly_name: "Pračka", duration: "0:45:00", finishes_at: new Date(now + 12 * 60e3).toISOString(), remaining: "0:45:00", icon: "mdi:washing-machine" }, 33),
+  st("switch.zasuvka", "on", { friendly_name: "Zásuvka kávovar", icon: "mdi:coffee-maker" }, 8),
+  st("person.jan", "home", { friendly_name: "Jan" }, 180),
+  st("input_select.rezim", "Kino", { friendly_name: "Režim domu", options: ["Den", "Noc", "Kino", "Pryč"], icon: "mdi:home-variant" }, 50),
+  st("update.core", "on", { friendly_name: "Home Assistant Core", installed_version: "2026.9.3", latest_version: "2026.10.0" }, 600),
+  st("scene.vecer", "2026-10-05T18:00:00", { friendly_name: "Večerní scéna", icon: "mdi:weather-sunset" }, 600),
+].forEach((s) => (states[s.entity_id] = s));
+
+const CS = { on: "Zapnuto", off: "Vypnuto", open: "Otevřeno", closed: "Zavřeno", locked: "Zamčeno", unlocked: "Odemčeno", playing: "Přehrává", paused: "Pozastaveno", heat: "Topení", cool: "Chlazení", auto: "Auto", heating: "Topí", cleaning: "Uklízí", returning: "Vrací se", docked: "V základně", armed_away: "Zabezpečeno (pryč)", disarmed: "Nezabezpečeno", home: "Doma", not_home: "Pryč", active: "Běží", idle: "Nečinný", detected: "Detekováno" };
+const BIN = { motion: ["Klid", "Detekován"], window: ["Zavřeno", "Otevřeno"], smoke: ["OK", "Kouř!"] };
+const hassBase = {
+  language: "cs", locale: { language: "cs" }, user: { name: "Jan" }, themes: { darkMode: false },
+  config: { unit_system: { temperature: "°C" } },
+  formatEntityState(so, state) {
+    const s = state ?? so.state, a = so.attributes;
+    if (so.entity_id.startsWith("binary_sensor.") && BIN[a.device_class]) return BIN[a.device_class][s === "on" ? 1 : 0];
+    if (!isNaN(Number(s)) && s !== "" && !so.entity_id.startsWith("scene.")) return new Intl.NumberFormat("cs").format(Number(s)) + (a.unit_of_measurement ? (a.unit_of_measurement === "%" ? " %" : " " + a.unit_of_measurement) : "");
+    if (so.entity_id.startsWith("scene.")) return "5. 10. 18:00";
+    return CS[s] || s;
+  },
+  formatEntityAttributeValue(so, attr, v) { return String(v ?? so.attributes[attr]); },
+  callService(domain, service, data) {
+    log(`${domain}.${service} ${JSON.stringify(data)}`);
+    const id = data.entity_id, s = states[id];
+    if (!s) return Promise.resolve();
+    const n = { ...s, attributes: { ...s.attributes }, last_changed: new Date().toISOString(), last_updated: new Date().toISOString() };
+    const a = n.attributes;
+    if (service === "toggle") n.state = n.state === "on" ? "off" : "on";
+    if (service === "turn_on") { n.state = "on"; if (data.brightness_pct != null) a.brightness = Math.round(data.brightness_pct * 2.55); if (data.rgb_color) a.rgb_color = data.rgb_color; if (data.color_temp_kelvin) a.color_temp_kelvin = data.color_temp_kelvin; if (data.effect) a.effect = data.effect; if (a.brightness == null) a.brightness = 255; }
+    if (service === "turn_off") n.state = "off";
+    if (service === "set_cover_position") { a.current_position = data.position; n.state = data.position ? "open" : "closed"; }
+    if (service === "set_percentage") { a.percentage = data.percentage; n.state = "on"; }
+    if (service === "volume_set") a.volume_level = data.volume_level;
+    if (service === "set_temperature") a.temperature = data.temperature;
+    if (service === "set_hvac_mode") { n.state = data.hvac_mode; a.hvac_action = data.hvac_mode === "heat" ? "heating" : data.hvac_mode === "cool" ? "cooling" : "idle"; }
+    if (service === "lock") n.state = "locked";
+    if (service === "unlock") n.state = "unlocked";
+    if (service === "media_play_pause") n.state = n.state === "playing" ? "paused" : "playing";
+    if (service === "select_option") n.state = data.option;
+    if (service === "open_cover") { n.state = "open"; a.current_position = 100; }
+    if (service === "close_cover") { n.state = "closed"; a.current_position = 0; }
+    if (service === "oscillate") a.oscillating = data.oscillating;
+    if (service === "set_preset_mode") a.preset_mode = data.preset_mode;
+    states[id] = n;
+    push();
+    return Promise.resolve();
+  },
+  callWS(msg) {
+    const id = msg.entity_ids[0], s = states[id], start = new Date(msg.start_time).getTime(), end = new Date(msg.end_time).getTime();
+    const pts = [];
+    if (!isNaN(Number(s.state)) && s.state !== "") {
+      const base = Number(s.state), amp = Math.max(1, Math.abs(base) * 0.18);
+      for (let t = start; t <= end; t += (end - start) / 160) {
+        const k = (t - start) / (end - start);
+        pts.push({ s: String((base + Math.sin(k * 9) * amp * 0.6 + Math.sin(k * 23 + 1) * amp * 0.25 + (Math.random() - 0.5) * amp * 0.15 - amp * 0.2 * (1 - k)).toFixed(2)), lu: t / 1000 });
+      }
+    } else {
+      let on = true;
+      for (let t = start; t < end; t += (end - start) / (8 + Math.random() * 6)) { pts.push({ s: on ? s.state : "off", lu: t / 1000 }); on = !on; }
+    }
+    return new Promise((r) => setTimeout(() => r({ [id]: pts }), 250));
+  },
+  connection: {
+    subscribeMessage(cb, msg) {
+      setTimeout(() => cb({ result: msg.template.replace(/\{\{\s*states\('([^']+)'\)\s*\}\}/g, (_, e) => states[e] ? states[e].state : "?").replace(/\{\{[^}]*\}\}/g, "✓") }), 50);
+      return Promise.resolve(() => {});
+    },
+  },
+};
+let hass;
+const cards = [];
+function push() {
+  hass = { ...hassBase, states: { ...states }, themes: { darkMode: document.documentElement.classList.contains("dark") } };
+  cards.forEach((c) => (c.hass = hass));
+}
+let logT;
+function log(t) { const l = document.getElementById("log"); l.textContent = "▶ " + t; l.style.opacity = 1; clearTimeout(logT); logT = setTimeout(() => (l.style.opacity = 0), 2200); }
+window.addEventListener("hass-action", (e) => log(`action ${e.detail.action}: ${JSON.stringify(e.detail.config[e.detail.action + "_action"])}`));
+window.addEventListener("hass-more-info", (e) => log(`more-info ${e.detail.entityId}`));
+
+/* ---------- showcase ---------- */
+const SECTIONS = [
+  ["Styly", "", [
+    { entity: "light.obyvak", style: "glass", slider: "card", controls: true, tilt: true, chips: [{ entity: "sensor.teplota" }, { entity: "binary_sensor.pohyb" }] },
+    { entity: "light.led_pasek", style: "gradient", slider: "bar", icon_shape: "squircle" },
+    { entity: "fan.ventilator", style: "aurora", controls: true, icon_shape: "blob" },
+    { entity: "climate.obyvak", style: "frosted", controls: true, card_effect: "shimmer" },
+    { entity: "media_player.obyvak", style: "soft", controls: true, icon_shape: "squircle" },
+    { entity: "light.kuchyn", style: "outline", controls: true, secondary_info: "state-last-changed" },
+  ]],
+  ["Neon", "neonbg", [
+    { entity: "light.led_pasek", style: "neon", slider: "bar", card_effect: "border" },
+    { entity: "binary_sensor.kour", style: "neon", badge_icon: "mdi:alert" },
+    { entity: "alarm_control_panel.dum", style: "neon", icon_shape: "hexagon" },
+  ]],
+  ["Hero a grafy", "", [
+    { entity: "sensor.teplota", layout: "hero", style: "glass", graph: "line", badge_entity: "sensor.baterie" },
+    { entity: "sensor.spotreba", layout: "hero", style: "default", graph: "bar", graph_position: "background", thresholds: [{ value: 0, color: "green" }, { value: 1000, color: "amber" }, { value: 2500, color: "red", icon_animation: "pulse" }] },
+    { entity: "sensor.co2", layout: "horizontal", style: "default", graph: "line", secondary: "{{ value }} · {{ relative }}" },
+    { entity: "binary_sensor.pohyb", graph: "timeline", graph_hours: 12, style: "glass" },
+  ]],
+  ["Dlaždice (square)", "sq", [
+    { entity: "light.obyvak", layout: "square", style: "glass", slider: "card", controls: true },
+    { entity: "sensor.voda", layout: "square", fill: "liquid", style: "default" },
+    { entity: "cover.zaluzie", layout: "square", style: "gradient", controls: true, fill: "liquid" },
+    { entity: "lock.dvere", layout: "square", style: "soft", controls: true },
+    { entity: "timer.pracka", layout: "square", style: "glass", controls: true },
+    { entity: "person.jan", layout: "square", style: "frosted", icon_shape: "squircle" },
+  ]],
+  ["Svislé, kompaktní a další", "", [
+    { entity: "vacuum.robot", layout: "vertical", style: "glass", controls: true, badge_text: "64%" },
+    { entity: "binary_sensor.okno", layout: "vertical", style: "default", card_effect: "pulse" },
+    { entity: "switch.zasuvka", layout: "compact", controls: true, style: "glass" },
+    { entity: "input_select.rezim", layout: "compact", style: "frosted" },
+    { entity: "update.core", controls: true, style: "default", card_effect: "glow" },
+    { entity: "sensor.baterie", style: "default", ring: true },
+    { name: "Dobrý večer, {{ user }}", icon: "mdi:weather-night", color: "deep-purple", style: "gradient", secondary: "Teplota {{ states('sensor.teplota') }} °C", icon_animation: "float",
+      chips: [{ entity: "light.obyvak" }, { entity: "lock.dvere" }, { entity: "media_player.obyvak", show_state: false }, { icon: "mdi:movie-open", name: "Kino", tap_action: { action: "call-service", service: "scene.turn_on" } }],
+      popup_title: "Rychlé akce", popup_buttons: [{ entity: "light.obyvak" }, { entity: "light.kuchyn" }, { entity: "switch.zasuvka" }, { entity: "scene.vecer" }, { entity: "fan.ventilator" }, { entity: "lock.dvere" }] },
+  ]],
+];
+const main = document.getElementById("main");
+for (const [title, cls, list] of SECTIONS) {
+  const h = document.createElement("h2"); h.textContent = title; main.appendChild(h);
+  const g = document.createElement("div"); g.className = "grid " + cls; main.appendChild(g);
+  for (const conf of list) {
+    const c = document.createElement("toptop-card");
+    c.setConfig({ type: "custom:toptop-card", ...conf });
+    g.appendChild(c); cards.push(c);
+  }
+}
+document.getElementById("theme").onclick = () => { document.documentElement.classList.toggle("dark"); push(); };
+document.getElementById("wall").onclick = () => document.body.classList.toggle("wall");
+if (location.hash.includes("dark")) document.documentElement.classList.add("dark");
+// simulate live updates
+setInterval(() => {
+  const t = states["sensor.teplota"]; states["sensor.teplota"] = { ...t, state: (Number(t.state) + (Math.random() - 0.5) * 0.4).toFixed(1), last_updated: new Date().toISOString() };
+  const p = states["sensor.spotreba"]; states["sensor.spotreba"] = { ...p, state: String(Math.round(800 + Math.random() * 1400)), last_updated: new Date().toISOString() };
+  push();
+}, 4000);
+</script>
+<script>push();</script>
+</body>
+</html>

@@ -1929,7 +1929,19 @@ class TopTopPopup extends TTBase {
       </div>`;
     this._sheet = this.shadowRoot.querySelector(".sheet");
     this._roots = this.shadowRoot.querySelectorAll(".inner");
-    this.shadowRoot.querySelector(".backdrop").addEventListener("click", () => this.close());
+    // Close only when a press both starts and ends on the backdrop. On touch devices the
+    // browser fires a delayed "click" after the tap that opened the popup – it would land
+    // on the freshly created backdrop and close the popup immediately.
+    const backdrop = this.shadowRoot.querySelector(".backdrop");
+    this._openedAt = Date.now();
+    let downOnBackdrop = false;
+    backdrop.addEventListener("pointerdown", () => { downOnBackdrop = Date.now() - this._openedAt > 300; });
+    backdrop.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (downOnBackdrop) this.close();
+      downOnBackdrop = false;
+    });
     this._bindSwipe();
     document.body.appendChild(this);
     this._flush();
@@ -2041,6 +2053,12 @@ class TopTopPopup extends TTBase {
       this._ph = { points: [], hours: want, failed: true };
       this._scheduleRender();
     }
+  }
+
+  _onClick(e) {
+    // swallow the ghost click of the tap that opened the popup
+    if (Date.now() - (this._openedAt || 0) < 350) { e.stopPropagation(); return; }
+    super._onClick(e);
   }
 
   _dispatchAction(def, kind, a) {
